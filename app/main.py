@@ -12,6 +12,9 @@ from app.metrics.compute_metrics import compute_metrics
 from app.flags.risk_flags import evaluate_risk_flags, assessment_to_dict
 from app.llm.analyze import generate_narrative
 
+from pathlib import Path
+from app.report.render_markdown import render_markdown
+
 
 def parse_args():
     p = argparse.ArgumentParser(description="Running Coach: generate metrics, risk flags, and narrative report.")
@@ -57,6 +60,21 @@ def main():
             "takeaways": narrative["takeaways"],
         },
     }
+
+    # Save outputs
+    out_dir = Path('data') / 'processed'
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = args.name.strip().replace(' ', '_')
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    json_path = out_dir / f'{safe_name}_{stamp}_report.json'
+    md_path = out_dir / f'{safe_name}_{stamp}_report.md'
+
+    json_path.write_text(json.dumps(payload, indent = 2), encoding = 'utf-8')
+    md_path.write_text(render_markdown(payload), encoding='utf-8')
+
+    print(f'\nSaved:\n- {json_path}\n- {md_path}\n')
 
     print(json.dumps(payload, indent=2))
 
