@@ -14,6 +14,7 @@ from app.llm.analyze import generate_narrative
 
 from pathlib import Path
 from app.report.render_markdown import render_markdown
+from app.report.render_pdf import render_pdf
 
 
 def parse_args():
@@ -70,13 +71,18 @@ def main():
 
     json_path = out_dir / f'{safe_name}_{stamp}_report.json'
     md_path = out_dir / f'{safe_name}_{stamp}_report.md'
+    pdf_path = out_dir / f'{safe_name}_{stamp}_report.pdf'
+
+    md_text = render_markdown(payload)
 
     json_path.write_text(json.dumps(payload, indent = 2), encoding = 'utf-8')
-    md_path.write_text(render_markdown(payload), encoding='utf-8')
+    md_path.write_text(md_text, encoding='utf-8')
+    render_pdf(md_text, pdf_path)
 
-    print(f'\nSaved:\n- {json_path}\n- {md_path}\n')
-
-    print(json.dumps(payload, indent=2))
+    print("\nSaved:")
+    print(f"- {json_path}")
+    print(f"- {md_path}")
+    print(f"- {pdf_path}")
 
 
 if __name__ == "__main__":
