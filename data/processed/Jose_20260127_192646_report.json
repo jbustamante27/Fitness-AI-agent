@@ -1,0 +1,40 @@
+{
+  "runner_name": "Jose",
+  "generated_at": "2026-01-27T19:26:46",
+  "metrics": {
+    "lookback_days": 28,
+    "run_count": 1,
+    "total_distance_km": 4.94,
+    "weekly_distance": [
+      4.94
+    ],
+    "weekly_frequency": [
+      1
+    ],
+    "acwr": 4.0,
+    "longest_run_pct": 1.0,
+    "rest_days_last_14": 13,
+    "back_to_back_runs_last_14": 0,
+    "easy_pct": 70.0,
+    "hard_pct": 0.0
+  },
+  "risk": {
+    "risk_level": "moderate",
+    "risk_flags": [
+      "long_run_dominance",
+      "volume_spike"
+    ],
+    "limitations": [
+      "Missing acwr or sufficient weekly_distance; undertraining check may be incomplete."
+    ],
+    "flag_details": {
+      "volume_spike": "Training volume increased sharply relative to your recent baseline. Sudden spikes elevate short-term injury and fatigue risk.",
+      "long_run_dominance": "A large share of your weekly volume is concentrated in one run. When the long run dominates the week, connective tissues often have less time to adapt."
+    }
+  },
+  "narrative": {
+    "interpretation": "**\nThe provided metrics indicate that the runner has engaged in only one run over the past 28 days, covering a total distance of 4.94 km. This translates to a weekly frequency of just one run, which is significantly below the typical recommendations for endurance training. The Acute:Chronic Workload Ratio (ACWR) is notably high at 4.0, suggesting a considerable spike in training volume relative to previous weeks. The longest run constitutes 100% of the total distance, indicating a lack of variety in training. Additionally, the runner has spent 70% of their time in easy efforts, with no hard efforts recorded. The risk flags of \"long run dominance\" and \"volume spike\" point to potential issues with training load management, increasing the risk of injury or burnout.\n\n**",
+    "recommendations": "**\n1. **Increase Frequency Gradually:** Aim to incorporate at least 2-3 runs per week to build a more consistent training routine. Start with shorter distances to allow the body to adapt.\n2. **Diversify Training Efforts:** Introduce a mix of easy, moderate, and hard runs. Consider adding interval training or tempo runs to improve overall fitness and prevent monotony.\n3. **Monitor Workload:** Keep an eye on the ACWR to ensure it stays within a safer range (typically between 0.8 and 1.3). Gradually increase mileage to avoid overwhelming the body, especially after a long period of low activity.\n\n**",
+    "takeaways": "**\nThe current training metrics suggest that the runner is at a moderate risk due to a high ACWR and a lack of training frequency. It is essential to increase both the number of runs and the variety of training intensities to promote better adaptation and reduce injury risk. Consistency and gradual progression will be key to developing endurance safely."
+  }
+}
