@@ -6,8 +6,8 @@ import json
 import os
 from datetime import datetime
 
-from app.io.fit_parser import parse_garmin_fit
-from app.io.csv_parser import parse_garmin_csv
+from app.parsing.fit_parser import parse_garmin_fit
+from app.parsing.csv_parser import parse_garmin_csv
 from app.metrics.compute_metrics import compute_metrics
 from app.flags.risk_flags import evaluate_risk_flags, assessment_to_dict
 from app.llm.analyze import generate_narrative
