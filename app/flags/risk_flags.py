@@ -77,7 +77,12 @@ def evaluate_risk_flags(metrics: Dict[str, Any]) -> RiskAssessment:
     limitations: List[str] = []
     details: Dict[str, str] = {}
 
-    acwr = _get(metrics, "acwr", (int, float))
+    weekly_acwr = _get(metrics, "weekly_acwr", (int, float))
+    weekly_acwr_is_reliable = _get(metrics, "weekly_acwr_is_reliable", bool)
+    if weekly_acwr_is_reliable is None:
+        weekly_acwr_is_reliable = False
+
+    legacy_acwr = _get(metrics, "acwr", (int, float))
     duration_acwr = _get(metrics, 'duration_acwr', (int, float))
 
     weekly_distance = _get(metrics, "weekly_distance", list)
@@ -99,14 +104,24 @@ def evaluate_risk_flags(metrics: Dict[str, Any]) -> RiskAssessment:
 
     # --- A) volume_spike ---
     volume_spike_triggered = False
-    if acwr is None and not weekly_distance:
-        limitations.append("Missing acwr and weekly_distance; cannot assess volume spikes reliably.")
+    if weekly_acwr is None and legacy_acwr is None and not weekly_distance:
+        limitations.append("Missing weekly_acwr, acwr, and weekly_distance; cannot assess volume spikes reliably.")
     else:
-        # Trigger if acwr >= 1.5
-        if isinstance(acwr, (int, float)) and acwr >= 1.5:
-            volume_spike_triggered = True
+        # Prefer weekly ACWR when reliable
+        if isinstance(weekly_acwr, (int, float)) and weekly_acwr_is_reliable:
+            if weekly_acwr >= 1.5:
+                volume_spike_triggered = True
+            elif weekly_acwr >= 1.3:
+                volume_spike_triggered = True
+        
+        # Fallback to legacy ACWR only if weekly ACWR is unavailable or unreliable
+        elif isinstance(legacy_acwr, (int, float)):
+            if legacy_acwr >= 1.5:
+                volume_spike_triggered = True
+            elif legacy_acwr >= 1.3:
+                volume_spike_triggered = True
 
-        # Trigger if last week >= 1.25 * previous week (if we have >=2 weeks)
+        #Also check explicit week-over-week spike
         if isinstance(weekly_distance, list) and len(weekly_distance) >= 2:
             vals = _to_float_list(weekly_distance)
             if vals is None:
@@ -117,21 +132,44 @@ def evaluate_risk_flags(metrics: Dict[str, Any]) -> RiskAssessment:
                 if prev_wk > 0 and last_wk >= 1.25 * prev_wk:
                     volume_spike_triggered = True
         
-        if volume_trend == 'increasing' and isinstance(acwr, (int, float)) and acwr >= 1.3:
-            volume_spike_triggered = True
+        # Trend aware boost
+        if volume_trend == "increasing":
+            if isinstance(weekly_acwr, (int, float)) and weekly_acwr_is_reliable and weekly_acwr >= 1.3:
+                volume_spike_triggered = True
+            elif isinstance(legacy_acwr, (int, float)) and legacy_acwr >= 1.3:
+                volume_spike_triggered = True
 
     if volume_spike_triggered:
         flags.append("volume_spike")
-        details["volume_spike"] = (
-            "Training volume increased sharply relative to your recent baseline. "
-            "Sudden spikes elevate short-term injury and fatigue risk."
-        )
+
+        if isinstance(weekly_acwr, (int, float)) and weekly_acwr_is_reliable:
+            details["volume_spike"] = (
+                f"Weekly load rose sharply relative to your recent baseline "
+                f"(weekly ACWR {weekly_acwr:.2f}). Sudden spikes elevate short-term injury and fatigue risk."
+            )
+        elif isinstance(legacy_acwr, (int, float)):
+            details["volume_spike"] = (
+                f"Recent load rose sharply relative to your rolling baseline "
+                f"(legacy ACWR {legacy_acwr:.2f}). This is a useful warning signal, but it is less stable than the "
+                f"week-based load model."
+            )
+        else:
+            details["volume_spike"] = (
+                "Training volume increased sharply relative to the previous week. "
+                "Sudden spikes elevate short-term injury and fatigue risk."
+            )
+
 
     # --- B) duration_spike ---
     duration_spike_triggered = False
     if duration_acwr is None and not weekly_duration_min:
         limitations.append('Missing duration_acwr and weekly_duration_min; cannot assess time-based load spikes.')
     else:
+        if isinstance(duration_acwr, (int, float)) and duration_acwr >= 1.5:
+            duration_spike_triggered = True
+        elif duration_trend == "increasing" and isinstance(duration_acwr, (int, float)) and duration_acwr >= 1.3:
+            duration_spike_triggered = True
+
         if isinstance(weekly_duration_min, list) and len(weekly_duration_min) >= 2:
             vals = _to_float_list(weekly_duration_min)
             if vals is None:
@@ -142,8 +180,6 @@ def evaluate_risk_flags(metrics: Dict[str, Any]) -> RiskAssessment:
                 if prev_wk > 0 and last_wk >= 1.25 * prev_wk:
                     duration_spike_triggered = True
     
-        if duration_trend == 'increasing' and isinstance(duration_acwr, (int, float)) and duration_acwr >= 1.3:
-            duration_spike_triggered = True
     
     if duration_spike_triggered:
         flags.append('duration_spike')
@@ -153,13 +189,13 @@ def evaluate_risk_flags(metrics: Dict[str, Any]) -> RiskAssessment:
         )
     
     # --- C) undertraining ---
-    if acwr is None or not isinstance(weekly_distance, list) or len(weekly_distance) < 2:
+    if legacy_acwr is None or not isinstance(weekly_distance, list) or len(weekly_distance) < 2:
         limitations.append("Missing acwr or sufficient weekly_distance; undertraining check may be incomplete.")
     else:
         vals = _to_float_list(weekly_distance)
         if vals is None:
             limitations.append('weekly_distance values invalid; undertraining check skipped.')
-        elif acwr < 0.8 and _trend_is_flat_or_decreasing(vals):
+        elif legacy_acwr < 0.8 and _trend_is_flat_or_decreasing(vals):
             flags.append("undertraining")
             details["undertraining"] = (
                 "Recent training load is below your longer-term baseline and appears flat or declining. "
@@ -260,7 +296,7 @@ def evaluate_risk_flags(metrics: Dict[str, Any]) -> RiskAssessment:
                     "This pattern can accumulate fatigue even when individual runs seem manageable."
                 )
         except Exception:
-            limitations.append('strain invalid; strain checked skipped.')
+            limitations.append('strain invalid; strain check skipped.')
 
     # --- Overall risk level ---
     flag_set = set(flags)
@@ -271,13 +307,13 @@ def evaluate_risk_flags(metrics: Dict[str, Any]) -> RiskAssessment:
         or ('high_monotony' in flag_set and 'high_strain' in flag_set)
     ):
         risk_level = 'high'
-    elif len(flags) >= 2:
+    elif len(flag_set) >= 2:
         risk_level = 'moderate'
     else:
         risk_level = 'low'
 
     # Keep output stable: sorted flags for consistent diffs
-    flags_sorted = sorted(set(flags))
+    flags_sorted = sorted(flag_set)
 
     return RiskAssessment(
         risk_level=risk_level,

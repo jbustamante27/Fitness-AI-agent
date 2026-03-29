@@ -25,7 +25,7 @@ Compute:
     - Strain: overall weekly stress on the runner
         -> total weekly load * monotony
 '''
-def _compute_monotony_and_strain(last7_daily_loads: List[float]) -> Tuple[Optional[float], Optional[float]]:
+def compute_monotony_and_strain(last7_daily_loads: List[float]) -> Tuple[Optional[float], Optional[float]]:
     if not last7_daily_loads:
         return None, None
     

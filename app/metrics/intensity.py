@@ -3,7 +3,7 @@ from typing import Dict, List
 from app.io.models import Run
 
 # Take a group of runs and estimate what percentage of the total distance was 'easy' vs 'hard', based on the runner's own pace distribution
-def _intensity_split_by_pace(runs: List[Run]) -> Dict[str, float]:
+def intensity_split_by_pace(runs: List[Run]) -> Dict[str, float]:
     '''
     Pace-based bucketing using athlete's own distribution in lookback:
         - hard: fastest 15% (lowest sec/km)

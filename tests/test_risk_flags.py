@@ -85,3 +85,51 @@ def test_limited_data_case():
     assert "Missing hard_pct; cannot assess hard-running proportion." in assessment.limitations
     assert "Missing monotony; cannot assess day-to-day load variability." in assessment.limitations
     assert "Missing strain; cannot assess combined weekly load and monotony." in assessment.limitations
+
+def test_risk_flags_prefers_weekly_acwr_when_reliable():
+    metrics = {
+        "weekly_acwr": 1.45,
+        "weekly_acwr_is_reliable": True,
+        "acwr": 1.05,
+        "duration_acwr": 1.0,
+        "weekly_distance": [18.0, 22.0, 26.0, 24.0, 30.0],
+        "weekly_duration_min": [90.0, 100.0, 110.0, 105.0, 125.0],
+        "volume_trend": "increasing",
+        "duration_trend": "flat",
+        "longest_run_pct": 0.30,
+        "easy_pct": 70.0,
+        "hard_pct": 12.0,
+        "rest_days_last_14": 4,
+        "back_to_back_runs_last_14": 1,
+        "monotony": 1.5,
+        "strain": 150.0,
+        "distance_last_7_km": 30.0,
+    }
+
+    result = evaluate_risk_flags(metrics)
+
+    assert "volume_spike" in result.risk_flags
+
+def test_risk_flags_falls_back_to_legacy_acwr_when_weekly_acwr_unreliable():
+    metrics = {
+        "weekly_acwr": 1.45,
+        "weekly_acwr_is_reliable": False,
+        "acwr": 1.4,
+        "duration_acwr": 1.0,
+        "weekly_distance": [20.0, 25.0],
+        "weekly_duration_min": [100.0, 120.0],
+        "volume_trend": "increasing",
+        "duration_trend": "flat",
+        "longest_run_pct": 0.30,
+        "easy_pct": 70.0,
+        "hard_pct": 12.0,
+        "rest_days_last_14": 4,
+        "back_to_back_runs_last_14": 1,
+        "monotony": 1.5,
+        "strain": 150.0,
+        "distance_last_7_km": 25.0,
+    }
+
+    result = evaluate_risk_flags(metrics)
+
+    assert "volume_spike" in result.risk_flags

@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import List
 
 # Simple trend classification for recent weekly values
-def _trend_label(values: List[float]) -> str:
+def trend_label(values: List[float]) -> str:
     if len(values) < 2:
         return 'insufficient_data'
     
