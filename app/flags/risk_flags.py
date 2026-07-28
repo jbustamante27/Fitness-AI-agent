@@ -1,328 +1,126 @@
 from __future__ import annotations
-from dataclasses import dataclass, asdict
-from typing import Any, Dict, List, Optional
 
+from app.domain.schemas import ComputedMetrics, RiskAssessment
 
-@dataclass(frozen=True)
-class RiskAssessment:
-    risk_level: str                    # "low" | "moderate" | "high"
-    risk_flags: List[str]              # deterministic flags
-    limitations: List[str]             # missing-metric notes
-    flag_details: Dict[str, str]       # human-readable explanations
-
-# Safe dictionary accessor. It helps avoid crashes or incorrect data when pulling values from a metrics dictionary
-def _get(metrics: Dict[str, Any], key: str, expected_type: Any = None) -> Any:
-    if key not in metrics:
-        return None
-    val = metrics.get(key)
-    if expected_type is None:
-        return val
-    
-    try:
-        if expected_type is list:
-            return val if isinstance(val, list) else None
-        return val if isinstance(val, expected_type) else None
-    except Exception:
-        return None
-
-# Convert a list of unknown values into a list of floats
-def _to_float_list(values: List[Any]) -> Optional[List[float]]:
-    try:
-        return [float(x) for x in values]
-    except Exception:
-        return None
 
 # Determine whether the training load is stable or decreasing
-def _trend_is_flat_or_decreasing(weekly_distance: List[float]) -> bool:
+def _trend_is_flat_or_decreasing(values: list[float]) -> bool:
     """
-    Conservative heuristic:
-    - If we have >= 3 weeks, compare last vs average of previous 2.
-    - If we have 2 weeks, last <= previous.
+    Returns True if the series is flat or trending down overall.
+    Used to avoid overreacting to ACWR when weekly volume is not actually rising
     """
-    if len(weekly_distance) < 2:
+    if len(values) < 2:
         return True
-    if len(weekly_distance) == 2:
-        return weekly_distance[-1] <= weekly_distance[-2]
-    
-    prev_avg = (weekly_distance[-2] + weekly_distance[-3]) / 2.0
-    return weekly_distance[-1] <= prev_avg
+    return values[-1] <= values[0]
 
+def assess_risk(metrics: ComputedMetrics) -> RiskAssessment:
+    flags: list[str] = []
+    explanations: list[str] = []
 
-# Evaluate all the risk flags
-def evaluate_risk_flags(metrics: Dict[str, Any]) -> RiskAssessment:
-    """
-    Deterministically derive risk flags + overall risk level from aggregated metrics.
+    acwr_distance = metrics.acwr_distance
+    acwr_duration = metrics.acwr_duration
+    weekly_distance = metrics.weekly_distance
+    weekly_duration_min = metrics.weekly_duration_min
+    longest_run_pct = metrics.longest_run_pct
+    easy_pct = metrics.easy_pct
+    hard_pct = metrics.hard_pct
+    rest_days_last_14 = metrics.rest_days_last_14
+    back_to_back_runs_last_14 = metrics.back_to_back_runs_last_14
+    monotony_last_7 = metrics.monotony_last_7
+    strain_last_7 = metrics.strain_last_7
 
-    Flags implemented (v1):
-      - volume_spike
-      - undertraining
-      - long_run_dominance
-      - insufficient_easy_running
-      - excessive_hard_running
-      - insufficient_recovery
-    Flags implemented (v2):
-      - duration_spike
-      - high_monotony
-      - high_strain 
-
-    Overall risk level:
-      - low:       0-1 flags
-      - moderate:  2-3 flags
-      - high:      4+ flags OR 
-                   (volume_spike AND insufficient_recovery) OR
-                   (duration_spike AND insufficient_recovery) OR
-                   (high_monotony AND high_strain)
-    """
-    flags: List[str] = []
-    limitations: List[str] = []
-    details: Dict[str, str] = {}
-
-    weekly_acwr = _get(metrics, "weekly_acwr", (int, float))
-    weekly_acwr_is_reliable = _get(metrics, "weekly_acwr_is_reliable", bool)
-    if weekly_acwr_is_reliable is None:
-        weekly_acwr_is_reliable = False
-
-    legacy_acwr = _get(metrics, "acwr", (int, float))
-    duration_acwr = _get(metrics, 'duration_acwr', (int, float))
-
-    weekly_distance = _get(metrics, "weekly_distance", list)
-    weekly_duration_min = _get(metrics, 'weekly_duration_min', list)
-
-    volume_trend = _get(metrics, 'volume_trend', str)
-    duration_trend = _get(metrics, 'duration_trend', str)
-
-    longest_run_pct = _get(metrics, "longest_run_pct", (int, float))
-    easy_pct = _get(metrics, "easy_pct", (int, float))
-    hard_pct = _get(metrics, "hard_pct", (int, float))
-
-    rest_days_last_14 = _get(metrics, "rest_days_last_14", int)
-    b2b_runs_last_14 = _get(metrics, "back_to_back_runs_last_14", int)
-
-    monotony = _get(metrics, 'monotony', (int, float))
-    strain = _get(metrics, 'strain', (int, float))
-    distance_last_7_km = _get(metrics, 'distance_last_7_km', (int, float))
 
     # --- A) volume_spike ---
-    volume_spike_triggered = False
-    if weekly_acwr is None and legacy_acwr is None and not weekly_distance:
-        limitations.append("Missing weekly_acwr, acwr, and weekly_distance; cannot assess volume spikes reliably.")
-    else:
-        # Prefer weekly ACWR when reliable
-        if isinstance(weekly_acwr, (int, float)) and weekly_acwr_is_reliable:
-            if weekly_acwr >= 1.5:
-                volume_spike_triggered = True
-            elif weekly_acwr >= 1.3:
-                volume_spike_triggered = True
-        
-        # Fallback to legacy ACWR only if weekly ACWR is unavailable or unreliable
-        elif isinstance(legacy_acwr, (int, float)):
-            if legacy_acwr >= 1.5:
-                volume_spike_triggered = True
-            elif legacy_acwr >= 1.3:
-                volume_spike_triggered = True
-
-        #Also check explicit week-over-week spike
-        if isinstance(weekly_distance, list) and len(weekly_distance) >= 2:
-            vals = _to_float_list(weekly_distance)
-            if vals is None:
-                limitations.append("weekly_distance values invalid; spike check skipped.")
-            else:
-                last_wk = vals[-1]
-                prev_wk = vals[-2]
-                if prev_wk > 0 and last_wk >= 1.25 * prev_wk:
-                    volume_spike_triggered = True
-        
-        # Trend aware boost
-        if volume_trend == "increasing":
-            if isinstance(weekly_acwr, (int, float)) and weekly_acwr_is_reliable and weekly_acwr >= 1.3:
-                volume_spike_triggered = True
-            elif isinstance(legacy_acwr, (int, float)) and legacy_acwr >= 1.3:
-                volume_spike_triggered = True
-
-    if volume_spike_triggered:
+    if (
+        acwr_distance is not None
+        and acwr_distance >= 1.5
+        and not _trend_is_flat_or_decreasing(weekly_distance)
+    ):
         flags.append("volume_spike")
-
-        if isinstance(weekly_acwr, (int, float)) and weekly_acwr_is_reliable:
-            details["volume_spike"] = (
-                f"Weekly load rose sharply relative to your recent baseline "
-                f"(weekly ACWR {weekly_acwr:.2f}). Sudden spikes elevate short-term injury and fatigue risk."
-            )
-        elif isinstance(legacy_acwr, (int, float)):
-            details["volume_spike"] = (
-                f"Recent load rose sharply relative to your rolling baseline "
-                f"(legacy ACWR {legacy_acwr:.2f}). This is a useful warning signal, but it is less stable than the "
-                f"week-based load model."
-            )
-        else:
-            details["volume_spike"] = (
-                "Training volume increased sharply relative to the previous week. "
-                "Sudden spikes elevate short-term injury and fatigue risk."
-            )
+        explanations.append(
+            f"Distance ACWR is elevated at {acwr_distance:.2f}, indicating a sharp recent increase in running volume."
+        )
 
 
     # --- B) duration_spike ---
-    duration_spike_triggered = False
-    if duration_acwr is None and not weekly_duration_min:
-        limitations.append('Missing duration_acwr and weekly_duration_min; cannot assess time-based load spikes.')
-    else:
-        if isinstance(duration_acwr, (int, float)) and duration_acwr >= 1.5:
-            duration_spike_triggered = True
-        elif duration_trend == "increasing" and isinstance(duration_acwr, (int, float)) and duration_acwr >= 1.3:
-            duration_spike_triggered = True
-
-        if isinstance(weekly_duration_min, list) and len(weekly_duration_min) >= 2:
-            vals = _to_float_list(weekly_duration_min)
-            if vals is None:
-                limitations.append('weekly_duration_min values invalid; duration spike check skipped.')
-            else:
-                last_wk = vals[-1]
-                prev_wk = vals[-2]
-                if prev_wk > 0 and last_wk >= 1.25 * prev_wk:
-                    duration_spike_triggered = True
-    
-    
-    if duration_spike_triggered:
-        flags.append('duration_spike')
-        details['duration_spike'] = (
-            "Your recent time under load increased sharply relative to your baseline. "
-            "Even if mileage looks manageable, a spike in total running time can raise fatigue and tissue stress."
-        )
-    
-    # --- C) undertraining ---
-    if legacy_acwr is None or not isinstance(weekly_distance, list) or len(weekly_distance) < 2:
-        limitations.append("Missing acwr or sufficient weekly_distance; undertraining check may be incomplete.")
-    else:
-        vals = _to_float_list(weekly_distance)
-        if vals is None:
-            limitations.append('weekly_distance values invalid; undertraining check skipped.')
-        elif legacy_acwr < 0.8 and _trend_is_flat_or_decreasing(vals):
-            flags.append("undertraining")
-            details["undertraining"] = (
-                "Recent training load is below your longer-term baseline and appears flat or declining. "
-                "This can reduce fitness and make harder efforts feel disproportionately taxing."
-            )
-
-    # --- D) long_run_dominance ---
-    if longest_run_pct is None:
-        limitations.append("Missing longest_run_pct; cannot assess long-run dominance.")
-    else:
-        try:
-            lr = float(longest_run_pct)
-            if lr >= 0.40:
-                flags.append("long_run_dominance")
-                details["long_run_dominance"] = (
-                    "A large share of your weekly volume is concentrated in one run. "
-                    "When the long run dominates the week, connective tissues often have less time to adapt."
-                )
-        except Exception:
-            limitations.append("longest_run_pct invalid; long-run dominance check skipped.")
-
-    # --- E) insufficient_easy_running ---
-    if easy_pct is None:
-        limitations.append("Missing easy_pct; cannot assess easy-running balance.")
-    else:
-        try:
-            ep = float(easy_pct)
-            if ep < 65.0:
-                flags.append("insufficient_easy_running")
-                details["insufficient_easy_running"] = (
-                    "A relatively low portion of your running is truly easy. "
-                    "Too much moderate/hard running can accumulate fatigue and limit recovery between sessions."
-                )
-        except Exception:
-            limitations.append("easy_pct invalid; easy-running balance check skipped.")
-
-    # --- F) excessive_hard_running ---
-    if hard_pct is None:
-        limitations.append("Missing hard_pct; cannot assess hard-running proportion.")
-    else:
-        try:
-            hp = float(hard_pct)
-            if hp >= 20.0:
-                flags.append("excessive_hard_running")
-                details["excessive_hard_running"] = (
-                    "A relatively high portion of your mileage is hard intensity. "
-                    "Sustained high-intensity volume is effective but increases recovery demand and injury risk."
-                )
-        except Exception:
-            limitations.append("hard_pct invalid; hard-running proportion check skipped.")
-
-    # --- G) insufficient_recovery ---
-    recovery_triggered = False
-    if rest_days_last_14 is None and b2b_runs_last_14 is None:
-        limitations.append("Missing rest_days_last_14 and back_to_back_runs_last_14; cannot assess recovery density.")
-    else:
-        if isinstance(rest_days_last_14, int) and rest_days_last_14 <= 1:
-            recovery_triggered = True
-        if isinstance(b2b_runs_last_14, int) and b2b_runs_last_14 >= 5:
-            recovery_triggered = True
-
-    if recovery_triggered:
-        flags.append("insufficient_recovery")
-        details["insufficient_recovery"] = (
-            "Recent training has limited recovery spacing (few rest days and/or frequent back-to-back runs). "
-            "Insufficient recovery increases fatigue and can make small issues linger into injuries."
-        )
-    
-    # --- H) high monotony ---
-    if monotony is None:
-        limitations.append('Missing monotony; cannot assess day-to-day load variability.')
-    else:
-        try:
-            m = float(monotony)
-            if m >= 2.0:
-                flags.append('high_monotony')
-                details['high_monotony'] = (
-                    "Your recent training pattern appears highly repetitive from day to day. "
-                    "High monotony can raise injury risk because stress is applied with limited variation."
-                )
-        except Exception:
-            limitations.append('monotony invalid; monotony check skipped.')
-    
-    # --- I) high_strain ---
-    if strain is None:
-        limitations.append('Missing strain; cannot assess combined weekly load and monotony.')
-    else:
-        try:
-            s = float(strain)
-            # Distance-based strain thresholds are proxy-based, so keep conservative
-            if (
-                (isinstance(distance_last_7_km, (int, float)) and distance_last_7_km >= 35 and s >= 45000)
-                or s >= 60000
-            ):
-                flags.append('high_strain')
-                details['high_strain'] = (
-                    "Your recent weekly load combined with low day-to-day variation suggests elevated overall strain. "
-                    "This pattern can accumulate fatigue even when individual runs seem manageable."
-                )
-        except Exception:
-            limitations.append('strain invalid; strain check skipped.')
-
-    # --- Overall risk level ---
-    flag_set = set(flags)
     if (
-        len(flags) >= 4
-        or ('volume_spike' in flag_set and 'insufficient_recovery' in flag_set)
-        or ('duration_spike' in flag_set and 'insufficient_recovery' in flag_set)
-        or ('high_monotony' in flag_set and 'high_strain' in flag_set)
+        acwr_duration is not None
+        and acwr_duration >= 1.5
+        and not _trend_is_flat_or_decreasing(weekly_duration_min)
     ):
-        risk_level = 'high'
-    elif len(flag_set) >= 2:
-        risk_level = 'moderate'
-    else:
-        risk_level = 'low'
+        flags.append("duration_spike")
+        explanations.append(
+            f"Duration ACWR is elevated at {acwr_duration:.2f}, indicating a sharp recent increase in time-on-feet."
+        )
+    
 
-    # Keep output stable: sorted flags for consistent diffs
-    flags_sorted = sorted(flag_set)
+    # --- C) long_run_dominance ---
+    if longest_run_pct >= 0.40:
+        flags.append("long_run_dominance")
+        explanations.append(
+            f"The longest run made up {longest_run_pct:.0%} of the last 7 days of distance, which may indicate unbalanced loading."
+        )
+
+
+    # --- D) Insufficient easy running ---
+    if easy_pct < 70.0:
+        flags.append("insufficient_easy_running")
+        explanations.append(
+            f"Only {easy_pct:.1f}% of running volume was easy, which is below the usual durability-focused range."
+        )
+
+    
+    # --- E) Excessive hard running ---
+    if hard_pct > 20.0:
+        flags.append("excessive_hard_running")
+        explanations.append(
+            f"{hard_pct:.1f}% of running volume was hard, which may reduce recovery capacity and increase injury risk."
+        )
+
+
+    # --- F) Insufficient Recovery ---
+    if rest_days_last_14 <= 1:
+        flags.append("insufficient_recovery")
+        explanations.append(
+            f"There were only {rest_days_last_14} rest day(s) in the last 14 days, suggesting limited recovery opportunity."
+        )
+    if back_to_back_runs_last_14 >= 5:
+        flags.append("frequent_back_to_back_runs")
+        explanations.append(
+            f"There were {back_to_back_runs_last_14} back-to-back run pair(s) in the last 14 days, which may indicate accumulated fatigue."
+        )
+
+
+    # --- G) High monotony ---
+    if monotony_last_7 is not None and monotony_last_7 >= 2.0:
+        flags.append("high_monotony")
+        explanations.append(
+            f"Training monotony is high at {monotony_last_7:.2f}, meaning daily load distribution has been relatively uniform."
+        )
+    
+    # --- H) High strain ---
+    if strain_last_7 is not None and strain_last_7 >= 150.0:
+        flags.append("high_strain")
+        explanations.append(
+            f"Training strain is elevated at {strain_last_7:.1f}, reflecting a high combination of load and monotony."
+        )
+    
+    
+    # --- Overall risk level ---
+    if len(flags) >= 5:
+        risk_level = "high"
+    elif len(flags) >= 3:
+        risk_level = "moderate"
+    elif len(flags) >= 1:
+        risk_level = "low"
+    else:
+        risk_level = "minimal"
 
     return RiskAssessment(
-        risk_level=risk_level,
-        risk_flags=flags_sorted,
-        limitations=sorted(set(limitations)),
-        flag_details=details,
+        risk_level = risk_level,
+        flags = flags,
+        explanations = explanations,
     )
 
 
-def assessment_to_dict(assessment: RiskAssessment) -> Dict[str, Any]:
-    """Helper for JSON serialization."""
-    return asdict(assessment)
+

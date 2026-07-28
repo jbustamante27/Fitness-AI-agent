@@ -6,17 +6,21 @@ from typing import Optional
 
 @dataclass(slots=True)
 class Run:
-    start_time = datetime
-    distance_m = float
-    duration_s = float
-    avg_hr = Optional[float] = None
-    max_hr = Optional[float] = None
+    start_time : datetime
+    distance_m : float
+    duration_s : float
+    avg_hr : Optional[float] = None
+    max_hr : Optional[float] = None
     elevation_gain_m: Optional[float] = None
     source_file: Optional[str] = None
 
     @property
     def distance_km(self) -> float:
         return self.distance_m / 1000.0
+    
+    @property
+    def duration_min(self) -> float:
+        return self.duration_s / 60.0
     
     @property
     def pace_s_per_km(self) -> Optional[float]:
@@ -71,3 +75,4 @@ class RiskAssessment:
     risk_level: str
     flags: list[str] = field(default_factory=list)
     explanations: list[str] = field(default_factory=list)
+

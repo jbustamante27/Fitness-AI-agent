@@ -3,6 +3,7 @@ import os
 from typing import Any, Dict, Tuple
 from openai import OpenAI
 from app.llm.prompt import SYSTEM_PROMPT, build_user_prompt
+from app.domain.schemas import ComputedMetrics, RiskAssessment
 
 
 def _split_sections(text: str) -> Tuple[str, str, str]:
@@ -21,7 +22,11 @@ def _split_sections(text: str) -> Tuple[str, str, str]:
     takeaways = text[i3 + len('TAKEAWAYS:'):].strip()
     return interpretation, recommendations, takeaways
 
-def generate_narrative(metrics: Dict[str, Any], risk: Dict[str, Any], model: str = "gpt-4o-mini") -> Dict[str, str]:
+def generate_narrative(
+        metrics: Dict[str, Any],
+        risk: Dict[str, Any], 
+        model: str = "gpt-4o-mini",
+        ) -> Dict[str, str]:
     api_key = os.getenv('OPENAI_API_KEY')
     if not api_key:
         raise RuntimeError('OPENAI_API_KEY is not set.')

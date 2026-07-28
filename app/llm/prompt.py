@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
-from typing import Any, Dict
+from dataclasses import asdict
+from app.domain.schemas import ComputedMetrics, RiskAssessment
 
 SYSTEM_PROMPT = '''
 You are an experienced endurance training analyst specializing in recreational runners.
@@ -13,14 +14,10 @@ You ONLY analyze the metrics explicitly provided.
 Tone: professional, calm, evidence-based, non-alarmist, plain English.
 '''
 
-def build_user_prompt(metrics: Dict[str, Any], risk: Dict[str, Any]) -> str:
+def build_user_prompt(metrics: ComputedMetrics, risk: RiskAssessment) -> str:
     payload = {
-        'metrics': metrics,
-        'risk': {
-            'risk_level': risk.get('risk_level'),
-            'risk_flags': risk.get('risk_flags'),
-            'limitations': risk.get('limitations', []),
-        },
+        'metrics': asdict(metrics),
+        'risk': asdict(risk),
     }
 
     return (
