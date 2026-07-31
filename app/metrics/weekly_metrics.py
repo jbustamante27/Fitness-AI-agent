@@ -1,7 +1,11 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, date
 from typing import Dict, List, Tuple
-from app.io.models import Run
+from app.domain.schemas import Run
+
+def latest_run_time(runs: List[Run]) -> datetime:
+    #Anchor point for all rolling windows. Does not assume runs are sorted
+    return max(r.start_time for r in runs)
 
 # Compute the start of the week (Monday) for any given datetime
 def week_start(d: datetime) -> datetime:
@@ -11,7 +15,7 @@ def week_start(d: datetime) -> datetime:
 def filter_lookback(runs: List[Run], days: int) -> List[Run]:
     if not runs:
         return []
-    cutoff = runs[-1].start_time - timedelta(days=days)
+    cutoff = latest_run_time(runs) - timedelta(days=days)
     return [r for r in runs if r.start_time >= cutoff]
 
 # Group runs by week and return summary stats per week
@@ -19,6 +23,8 @@ def weekly_buckets(runs: List[Run]) -> List[Tuple[datetime, float, float, int]]:
     '''
     Returns (week_start, total_distance_m, run_count) sorted ascending
     '''
+    if not runs:
+        return []
     buckets: Dict[datetime, Dict[str, float]] = {}
     for r in runs:
         ws = week_start(r.start_time)
@@ -31,19 +37,26 @@ def weekly_buckets(runs: List[Run]) -> List[Tuple[datetime, float, float, int]]:
         buckets[ws]['duration_s'] += r.duration_s
         buckets[ws]['count'] += 1.0
 
+    first = min(buckets)
+    last = max(buckets)
+
     out: List[Tuple[datetime, float, float, int]] = []
-    for ws in sorted(buckets.keys()):
-        out.append((ws,
-                    float(buckets[ws]['dist_m']),
-                    float(buckets[ws]['duration_s']),
-                    int(buckets[ws]['count'])))
+    cursor = first
+    while cursor <= last:
+        b = buckets.get(cursor)
+        if b is None:
+            out.append((cursor, 0.0, 0.0, 0))
+        else:
+            out.append((cursor, float(b["dist_m"]), float(b["duration_s"]), int(b["count"])))
+        cursor += timedelta(days=7)
+
     return out
 
 # Count how many days without running in last 2 weeks
 def count_rest_days_last_14(runs: List[Run]) -> int:
     if not runs:
         return 14
-    last_day = runs[-1].start_time.date()
+    last_day = latest_run_time(runs).date()
     days_with_run = {
         r.start_time.date()
         for r in runs if 0 <= (last_day - r.start_time.date()).days <= 13
@@ -54,7 +67,7 @@ def count_rest_days_last_14(runs: List[Run]) -> int:
 def count_back_to_back_runs_last_14(runs: List[Run]) -> int:
     if not runs:
         return 0
-    last_day = runs[-1].start_time.date()
+    last_day = latest_run_time(runs).date()
     days = sorted(
         {
             r.start_time.date()
@@ -72,7 +85,7 @@ def daily_distance_series_last_7(runs: List[Run]) -> List[float]:
     if not runs:
         return [0.0] * 7
     
-    last_day = runs[-1].start_time.date()
+    last_day = latest_run_time(runs).date()
     day_totals: Dict[date, float] = {}
 
     for r in runs:

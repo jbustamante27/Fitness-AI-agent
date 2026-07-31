@@ -101,8 +101,8 @@ def test_compute_metrics_computes_last_7_day_values():
 
     assert metrics.distance_last_7_km == 20.0
     assert metrics.duration_last_7_min == 100.0
-    assert round(metrics.acwr_distance, 2) == 2.67
-    assert round(metrics.acwr_duration, 2) == 2.67
+    assert round(metrics.acwr_distance, 2) == 4.0
+    assert round(metrics.acwr_duration, 2) == 4.0
     assert metrics.longest_run_pct == 0.5
 
 

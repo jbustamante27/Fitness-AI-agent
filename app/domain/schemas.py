@@ -55,13 +55,15 @@ class ComputedMetrics:
 
     acwr_distance: Optional[float] = None
     acwr_duration: Optional[float] = None
+    acwr_weeks_used: int = 0
+    acwr_is_reliable: bool = False
 
     longest_run_km_last_7: float = 0.0
     longest_run_pct: float = 0.0
 
-    easy_pct: float = 0.0
-    moderate_pct: float = 0.0
-    hard_pct: float = 0.0
+    easy_pct: Optional[float] = None
+    moderate_pct: Optional[float] = None
+    hard_pct: Optional[float] = None
 
     rest_days_last_14: int = 0
     back_to_back_runs_last_14: int = 0
@@ -69,10 +71,13 @@ class ComputedMetrics:
     monotony_last_7: Optional[float] = None
     strain_last_7: Optional[float] = None
 
+    weekly_distance_trend: str = "insufficient_data"
+
 
 @dataclass(slots=True)
 class RiskAssessment:
     risk_level: str
     flags: list[str] = field(default_factory=list)
     explanations: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
 

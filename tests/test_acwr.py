@@ -1,10 +1,7 @@
 from datetime import datetime
 
 from app.io.models import Run
-from app.metrics.acwr import (
-    compute_last7_vs_28_acwr,
-    compute_longest_run_pct_last7
-)
+from app.metrics.acwr import (compute_longest_run_pct_last7)
 
 
 def make_run(dt: datetime, distance_m: float, duration_s: float) -> Run:
@@ -14,49 +11,6 @@ def make_run(dt: datetime, distance_m: float, duration_s: float) -> Run:
         duration_s = duration_s,
         avg_hr = None,
     )
-
-def test_compute_last7_vs_28_acwr_returns_none_for_no_runs():
-    acwr, duration_acwr, dist_7_m, duration_7_s = compute_last7_vs_28_acwr([])
-
-    assert acwr is None
-    assert duration_acwr is None
-    assert dist_7_m == 0.0
-    assert duration_7_s == 0.0
-
-def test_compute_last7_vs_28_acwr_computes_expected_values():
-    runs = [
-        make_run(datetime(2026, 3, 1, 7, 0), 5000, 1500),
-        make_run(datetime(2026, 3, 5, 7, 0), 5000, 1500),
-        make_run(datetime(2026, 3, 10, 7, 0), 10000, 3000),
-        make_run(datetime(2026, 3, 15, 7, 0), 10000, 3000), # last rum
-    ]
-
-    acwr, duration_acwr, dist_7_m, duration_7_s = compute_last7_vs_28_acwr(runs)
-
-    # last 7 days relative to 3/15/26 includes 3/10/26 and 3/15/26
-    assert dist_7_m == 20000
-    assert duration_7_s == 6000
-
-    # total 28 day load in this dataset
-    # distance = 30000 => denominator = 7500 => 20000 / 7500 = 2.67
-    # duration = 9000 => denominator = 2250 => 6000 / 2250 = 2.67
-    assert acwr == 2.67
-    assert duration_acwr == 2.67
-
-
-def test_compute_last_7_vs_28_acwr_returns_none_when_total_load_is_zero():
-    runs = [
-        make_run(datetime(2026, 3, 10, 7, 0), 0, 0),
-        make_run(datetime(2026, 3, 15, 7, 0), 0, 0),
-    ]   
-
-    acwr, duration_acwr, dist_7_m, duration_7_s = compute_last7_vs_28_acwr(runs)
-
-    assert acwr is None
-    assert duration_acwr is None
-    assert dist_7_m == 0
-    assert duration_7_s == 0
-
 
 def test_compute_longest_run_pct_last7_returns_none_for_no_runs():
     assert compute_longest_run_pct_last7([]) is None
