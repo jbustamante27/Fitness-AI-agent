@@ -15,6 +15,8 @@ from app.parsing.fit_parser import parse_garmin_fit
 from app.report.render_markdown import render_markdown
 from app.report.render_pdf import render_pdf
 
+from dotenv import load_dotenv
+
 
 def parse_args():
     p = argparse.ArgumentParser(
@@ -25,8 +27,8 @@ def parse_args():
     p.add_argument(
         "--days",
         type=int,
-        default=28,
-        help="Lookback window in days (default 28)",
+        default=35,
+        help="Lookback window in days (default 35 = current week + 4 chronic weeks)",
     )
     p.add_argument(
         "--csv-distance-unit",
@@ -39,10 +41,16 @@ def parse_args():
         default="gpt-4o-mini",
         help="OpenAI model for narrative generation",
     )
+    p.add_argument(
+        "--skip-llm",
+        action="store_true",
+        help="Compute metrics and flags without calling the LLM (no API key needed)",
+    )
     return p.parse_args()
 
 
 def main():
+    load_dotenv()
     args = parse_args()
     path = args.input
     ext = os.path.splitext(path)[1].lower()
@@ -60,7 +68,15 @@ def main():
     metrics = compute_metrics(runs, lookback_days=args.days)
     risk = assess_risk(metrics)
 
-    narrative = generate_narrative(metrics, risk, model=args.model)
+    if args.skip_llm:
+        placeholder = "_LLM narrative skipped (--skip-llm)._"
+        narrative = {
+            "interpretation": placeholder,
+            "recommendations": placeholder,
+            "takeaways": placeholder,
+        }
+    else:
+        narrative = generate_narrative(metrics, risk, model=args.model)
 
     payload = {
         "runner_name": args.name,

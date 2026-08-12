@@ -49,7 +49,10 @@ def render_markdown(payload: Dict[str, Any]) -> str:
             return 'n/a'
         return f"{value:.{digits}f}{suffix}"
 
-    acwr_note = "" if metrics.get("acwr_is_reliable") else "  _(provisional)_"
+    acwr_note = (
+        "" if metrics.get("acwr_distance") is None or metrics.get("acwr_is_reliable")
+        else "  _(provisional)_"
+    )
 
     md = f"""# Running Coach Report — {runner_name}
 
