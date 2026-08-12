@@ -4,8 +4,7 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 from dateutil import parser as dateparser
-
-from app.io.models import Run
+from app.domain.schemas import Run
 
 
 def _norm(col: str) -> str:

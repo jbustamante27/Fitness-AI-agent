@@ -1,6 +1,5 @@
 from datetime import datetime
 
-from app.io.models import Run
 from app.metrics.acwr import (compute_longest_run_pct_last7)
 
 

@@ -1,6 +1,5 @@
 from datetime import datetime
 
-from app.io.models import Run
 from app.metrics.weekly_metrics import (
     weekly_buckets,
     count_rest_days_last_14,

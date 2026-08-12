@@ -16,6 +16,7 @@ def _trend_is_flat_or_decreasing(values: list[float]) -> bool:
 def assess_risk(metrics: ComputedMetrics) -> RiskAssessment:
     flags: list[str] = []
     explanations: list[str] = []
+    limitations: list[str] = []
 
     acwr_distance = metrics.acwr_distance
     acwr_duration = metrics.acwr_duration
@@ -63,7 +64,7 @@ def assess_risk(metrics: ComputedMetrics) -> RiskAssessment:
 
 
     # --- D) Insufficient easy running ---
-    if easy_pct < 70.0:
+    if easy_pct is not None and easy_pct < 70.0:
         flags.append("insufficient_easy_running")
         explanations.append(
             f"Only {easy_pct:.1f}% of running volume was easy, which is below the usual durability-focused range."
@@ -71,7 +72,7 @@ def assess_risk(metrics: ComputedMetrics) -> RiskAssessment:
 
     
     # --- E) Excessive hard running ---
-    if hard_pct > 20.0:
+    if hard_pct is not None and hard_pct > 20.0:
         flags.append("excessive_hard_running")
         explanations.append(
             f"{hard_pct:.1f}% of running volume was hard, which may reduce recovery capacity and increase injury risk."
@@ -106,6 +107,25 @@ def assess_risk(metrics: ComputedMetrics) -> RiskAssessment:
         )
     
     
+    # --- Limitations: be explicit about what could not be assessed ---
+    if metrics.acwr_distance is None:
+        limitations.append(
+            "Not enough weekly history to compute ACWR; volume-spike checks were skipped."
+        )
+    elif not metrics.acwr_is_reliable:
+        limitations.append(
+            f"ACWR used only {metrics.acwr_weeks_used} prior week(s) of history "
+            "instead of 4, so it should be read as provisional."
+        )
+    if easy_pct is None:
+        limitations.append(
+            "Fewer than 3 runs in the window; intensity distribution could not be assessed."
+        )
+    if monotony_last_7 is None:
+        limitations.append(
+            "Daily load was uniform or absent; monotony and strain are not meaningful."
+        )
+    
     # --- Overall risk level ---
     if len(flags) >= 5:
         risk_level = "high"
@@ -120,6 +140,7 @@ def assess_risk(metrics: ComputedMetrics) -> RiskAssessment:
         risk_level = risk_level,
         flags = flags,
         explanations = explanations,
+        limitations = limitations,
     )
 
 

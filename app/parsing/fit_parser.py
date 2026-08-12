@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional
 from fitparse import FitFile
-from app.io.models import Run
+from app.domain.schemas import Run
 
 
 def _to_datetime(value) -> Optional[datetime]:
