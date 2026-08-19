@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.metrics.acwr import (compute_longest_run_pct_last7)
+from app.domain.schemas import Run
 
 
 def make_run(dt: datetime, distance_m: float, duration_s: float) -> Run:

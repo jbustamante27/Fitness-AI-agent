@@ -6,6 +6,7 @@ from app.metrics.weekly_metrics import (
     count_back_to_back_runs_last_14,
     daily_distance_series_last_7,
 )
+from app.domain.schemas import Run
 
 
 def make_run(dt: datetime, distance_m: float, duration_s: float) -> Run:
