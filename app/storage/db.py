@@ -7,6 +7,10 @@ from typing import List, Optional
 
 from app.domain.schemas import Run
 
+import hashlib
+import json
+from dataclasses import asdict
+
 DEFAULT_DB_PATH = Path("data") / "fitness.db"
 
 SCHEMA = """
@@ -32,6 +36,16 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_runs_user_time ON runs (user_id, start_time);
+
+CREATE TABLE IF NOT EXISTS narratives (
+    user_id             INTEGER NOT NULL PRIMARY KEY,
+    fingerprint         TEXT NOT NULL,
+    interpratation      TEXT NOT NULL,
+    recommendations     TEXT NOT NULL,
+    takeaways           TEXT NOT NULL,
+    created_at          TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
 """
 
 def connect(db_path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
@@ -119,3 +133,57 @@ def _activity_id_for(run: Run) -> str:
     collide unless they started at the same second.
     """
     return f"{run.start_time.isoformat()}|{int(run.distance_m)}|{int(run.duration_s)}"
+
+def metrics_fingerprint(metrics) -> str:
+    payload = json.dumps(asdict(metrics), sort_keys=True, detault=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+def get_cached_narrative(
+        conn: sqlite3.Connection, user_id: int, fingerprint: str
+) -> Optional[dict]:
+    """Returns the cached narrative only if it was generated from this exact data."""
+    row = conn.execute(
+        "SELECT * FROM narratives WHERE user_id = ? AND fingerprint = ?",
+        (user_id, fingerprint),
+    ).fetchone()
+
+    if row is None:
+        return None
+
+    return {
+        "interpretation": row["interpretation"],
+        "recommendations": row["recommendations"],
+        "takeaways": row["takeaways"],
+    }
+
+def save_narrative(
+        conn: sqlite3.Connection, user_id: int, fingerprint: str, narrative: dict
+) -> None:
+    conn.execute(
+        """
+        INSERT or REPLACE INTO narratives
+            (user_id, fingerprint, interpretation, recommendations, takeaways, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            user_id,
+            fingerprint,
+            narrative["interpretation"],
+            narrative["recommendation"],
+            narrative["takeaways"],
+            datetime.now().isoformat(timespec="seconds")
+        ),
+    )
+    conn.commit()
+
+def test_narrative_cache_misses_when_metrics_change(tmp_path):
+    conn = connect(tmp_path / "test.db")
+    user_id = get_or_create_user(conn, "jose@example.com")
+
+    narrative = {
+        "interpretation": "i",
+        "recommendations": "r",
+        "takeaways": "t",
+    }
+    save_narrative(conn, user_id, "abc", narrative)
+    assert get_cached_narrative(conn, user_id, "xyz") is None
