@@ -40,7 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_runs_user_time ON runs (user_id, start_time);
 CREATE TABLE IF NOT EXISTS narratives (
     user_id             INTEGER NOT NULL PRIMARY KEY,
     fingerprint         TEXT NOT NULL,
-    interpratation      TEXT NOT NULL,
+    interpretation      TEXT NOT NULL,
     recommendations     TEXT NOT NULL,
     takeaways           TEXT NOT NULL,
     created_at          TEXT NOT NULL,
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS narratives (
 def connect(db_path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
     """Open a connection with foreign keys enforced and the schema applied."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA forein_keys = ON")
     conn.executescript(SCHEMA)
@@ -135,7 +135,7 @@ def _activity_id_for(run: Run) -> str:
     return f"{run.start_time.isoformat()}|{int(run.distance_m)}|{int(run.duration_s)}"
 
 def metrics_fingerprint(metrics) -> str:
-    payload = json.dumps(asdict(metrics), sort_keys=True, detault=str)
+    payload = json.dumps(asdict(metrics), sort_keys=True, default=str)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 def get_cached_narrative(
@@ -169,7 +169,7 @@ def save_narrative(
             user_id,
             fingerprint,
             narrative["interpretation"],
-            narrative["recommendation"],
+            narrative["recommendations"],
             narrative["takeaways"],
             datetime.now().isoformat(timespec="seconds")
         ),

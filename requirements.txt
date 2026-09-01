@@ -11,3 +11,5 @@ requests
 openai
 reportlab
 pytest>=8.0
+
+python-multipart
